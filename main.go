@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -96,6 +97,7 @@ func main() {
 
 	// Set up mailer
 	mailer = gomail.NewDialer("localhost", 25, "", "")
+	mailer.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 
 	// set up HTTP server
 	mux := http.NewServeMux()
@@ -175,7 +177,8 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 			"\n"+
 			"With best regards,\n"+
 			"Koning and Jacobs\n"),
-			record.Name, record.When))
+			record.Name,
+			record.When.Format("2 Jan 2006 15:04:05")))
 	go func(m *gomail.Message) {
 		if err := mailer.DialAndSend(m); err != nil {
 			log.Printf("Failed to so end e-mail: %s", err)
