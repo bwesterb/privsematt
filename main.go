@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -169,19 +171,28 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	m.SetHeader("From", "Privacy Seminar <no-reply@metrics.privacybydesign.foundation>")
 	m.SetHeader("To", record.EMail)
 	m.SetHeader("Subject", "Your presence at Privacy and Identity")
-	m.SetBody("text/plain",
-		fmt.Sprintf(("Dear student %s,\n"+
-			"\n"+
-			"This email confirms that your presence at the course\n"+
-			"Privacy and Identity has been registered at: %s\n"+
-			"\n"+
-			"With best regards,\n"+
-			"Koning and Jacobs\n"),
-			record.Name,
-			record.When.Format("2 Jan 2006 15:04:05")))
+	msg := fmt.Sprintf(("Dear student %s,\n" +
+		"\n" +
+		"This email confirms that your presence at the course\n" +
+		"Privacy and Identity has been registered at: %s\n" +
+		"\n" +
+		"With best regards,\n" +
+		"Koning and Jacobs\n"),
+		record.Name,
+		record.When.Format("2 Jan 2006 15:04:05"))
+	m.SetBody("text/plain", signMessage(msg))
 	go func(m *gomail.Message) {
 		if err := mailer.DialAndSend(m); err != nil {
 			log.Printf("Failed to so end e-mail: %s", err)
 		}
 	}(m)
+}
+
+func signMessage(msg string) string {
+	cmd := exec.Command("gpg", "--clear-sign")
+	stdin, _ := cmd.StdinPipe()
+	io.WriteString(stdin, msg)
+	stdin.Close()
+	out, _ := cmd.CombinedOutput()
+	return string(out)
 }
