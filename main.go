@@ -14,6 +14,7 @@ import (
 
 	"github.com/jinzhu/gorm"
 	"github.com/rs/cors"
+	"gopkg.in/gomail.v2"
 	"gopkg.in/yaml.v2"
 
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -21,8 +22,9 @@ import (
 
 // Globals
 var (
-	conf Conf
-	db   *gorm.DB
+	conf   Conf
+	db     *gorm.DB
+	mailer *gomail.Dialer
 )
 
 // Configuration
@@ -92,6 +94,9 @@ func main() {
 	db.AutoMigrate(Record{})
 	log.Println(" ok")
 
+	// Set up mailer
+	mailer = gomail.NewDialer("localhost", 25, "", "")
+
 	// set up HTTP server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", submitHandler)
@@ -143,7 +148,7 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 	err := json.Unmarshal([]byte(r.FormValue("request")), &request)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(
-			"Missing or malformed events form field: %s", err), 400)
+			"Missing or malformed request form field: %s", err), 400)
 		return
 	}
 
@@ -154,5 +159,26 @@ func submitHandler(w http.ResponseWriter, r *http.Request) {
 		EMail:  request.EMail,
 	}
 
-	db.Create(&record)
+	if err := db.Create(&record).Error; err != nil {
+		log.Printf("Failed to store attendance record: %s", err)
+	}
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", "Privacy Seminar <no-reply@metrics.privacybydesign.foundation>")
+	m.SetHeader("To", record.EMail)
+	m.SetHeader("Subject", "Your presence at Privacy and Identity")
+	m.SetBody("text/plain",
+		fmt.Sprintf(("Dear student %s,\n"+
+			"\n"+
+			"This email confirms that your presence at the course\n"+
+			"Privacy and Identity has been registered at: %s\n"+
+			"\n"+
+			"With best regards,\n"+
+			"Koning and Jacobs\n"),
+			record.Name, record.When))
+	go func(m *gomail.Message) {
+		if err := mailer.DialAndSend(m); err != nil {
+			log.Printf("Failed to so end e-mail: %s", err)
+		}
+	}(m)
 }
